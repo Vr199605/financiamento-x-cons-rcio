@@ -33,7 +33,7 @@ h1, h2, h3 { color: #1e3a8a; }
 """, unsafe_allow_html=True)
 
 # =========================
-# FUNÇÕES AUXILIARES
+# FUNÇÕES
 # =========================
 
 def probabilidade_contemplacao(lance_pct):
@@ -60,36 +60,35 @@ def ranking_lance(lance_pct):
         return "🔥 Lance agressivo"
 
 
-def calcular_consorcio(valor_credito, prazo, taxa_adm, fundo_reserva,
-                       lance_pct, lance_valor, prazo_contemplacao):
-
+def calcular_consorcio(
+    valor_credito,
+    prazo,
+    taxa_adm,
+    fundo_reserva,
+    lance_pct,
+    prazo_contemplacao
+):
     taxa_total = (taxa_adm + fundo_reserva) / 100
     valor_plano = valor_credito * (1 + taxa_total)
     parcela = valor_plano / prazo
 
-    if lance_valor > 0:
-        lance = lance_valor
-        lance_pct_final = (lance / valor_credito) * 100
-    else:
-        lance = valor_credito * (lance_pct / 100)
-        lance_pct_final = lance_pct
+    lance = valor_credito * (lance_pct / 100)
 
-    prob_texto, prob_num = probabilidade_contemplacao(lance_pct_final)
-    ranking = ranking_lance(lance_pct_final)
+    prob_texto, prob_num = probabilidade_contemplacao(lance_pct)
+    ranking = ranking_lance(lance_pct)
 
-    lance_embutido = lance
-    credito_liquido = valor_credito - lance_embutido
+    credito_liquido_embutido = valor_credito - lance
 
     return {
         "Parcela": parcela,
         "Valor Plano": valor_plano,
         "Lance": lance,
-        "Lance (%)": lance_pct_final,
+        "Lance (%)": lance_pct,
         "Probabilidade Texto": prob_texto,
         "Probabilidade Num": prob_num,
         "Ranking": ranking,
         "Prazo Contemplação": prazo_contemplacao,
-        "Crédito Líquido (Emb.)": credito_liquido
+        "Crédito Líquido Embutido": credito_liquido_embutido
     }
 
 
@@ -136,21 +135,35 @@ with tab_c:
     c1, c2 = st.columns([1, 2])
 
     with c1:
-        valor_credito = st.number_input("Valor do Crédito (R$)", 50000.0, 3000000.0, 300000.0, step=5000.0)
+        valor_credito = st.number_input(
+            "Valor do Crédito (R$)",
+            50000.0, 3000000.0, 300000.0, step=5000.0
+        )
+
         prazo_c = st.number_input("Prazo Total (meses)", 60, 240, 180)
         taxa_adm = st.number_input("Taxa de Administração (%)", 5.0, 30.0, 15.0)
         fundo_reserva = st.number_input("Fundo de Reserva (%)", 0.0, 5.0, 2.0)
 
-        lance_pct = st.slider("Lance em %", 0.0, 100.0, 30.0)
-        lance_valor = st.number_input("Ou lance em valor (R$)", 0.0, valor_credito, 0.0, step=1000.0)
+        lance_pct = st.number_input(
+            "Lance (%)",
+            min_value=0.0,
+            max_value=100.0,
+            value=30.0,
+            step=0.1
+        )
 
         prazo_contemplacao = st.number_input(
-            "Prazo estimado de contemplação (meses)", 1, prazo_c, 12
+            "Prazo estimado de contemplação (meses)",
+            1, prazo_c, 12
         )
 
     res = calcular_consorcio(
-        valor_credito, prazo_c, taxa_adm, fundo_reserva,
-        lance_pct, lance_valor, prazo_contemplacao
+        valor_credito,
+        prazo_c,
+        taxa_adm,
+        fundo_reserva,
+        lance_pct,
+        prazo_contemplacao
     )
 
     with c2:
@@ -168,12 +181,16 @@ with tab_c:
         • Crédito contratado: <b>R$ {valor_credito:,.2f}</b><br>
         • Lance ofertado: <b>R$ {res['Lance']:,.2f}</b><br>
         • Lance equivalente: <b>{res['Lance (%)']:.2f}%</b><br>
-        • Crédito líquido (lance embutido): <b>R$ {res['Crédito Líquido (Emb.)']:,.2f}</b>
+        • Crédito líquido (lance embutido): <b>R$ {res['Crédito Líquido Embutido']:,.2f}</b>
         </div>
         """, unsafe_allow_html=True)
 
         st.subheader("📊 Inteligência de Lance")
-        st.metric("Probabilidade de Contemplação", res["Probabilidade Texto"], f"{res['Probabilidade Num']}%")
+        st.metric(
+            "Probabilidade de Contemplação",
+            res["Probabilidade Texto"],
+            f"{res['Probabilidade Num']}%"
+        )
         st.metric("Ranking do Lance", res["Ranking"])
 
 # =========================
@@ -198,19 +215,24 @@ with tab_f:
         amortizacao = st.number_input("Amortização Extra Mensal (R$)", 0.0, 50000.0, 0.0)
         modelo = st.selectbox("Sistema de Amortização", ["Price", "SAC"])
 
-    df_fin = financiamento_simples(valor_financiado, prazo_f, taxa_mensal, modelo, amortizacao)
+    df_fin = financiamento_simples(
+        valor_financiado, prazo_f, taxa_mensal, modelo, amortizacao
+    )
 
     with f2:
-        st.subheader("📊 Resumo")
+        st.subheader("📊 Resumo do Financiamento")
         st.metric("Valor Financiado", f"R$ {valor_financiado:,.2f}")
         st.metric("Parcela Inicial", f"R$ {df_fin.iloc[0]['Parcela (R$)']:,.2f}")
         st.metric("Total Pago", f"R$ {df_fin['Parcela (R$)'].sum():,.2f}")
+
         st.dataframe(df_fin, use_container_width=True)
 
 st.markdown(
     '<div class="footer">Desenvolvido por Victor • Intelligence Banking 2026</div>',
     unsafe_allow_html=True
 )
+
+
 
 
 
