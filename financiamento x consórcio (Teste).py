@@ -106,28 +106,35 @@ def calcular_consorcio(valor_credito, prazo, taxa_adm, fundo_reserva,
     }
 
 
+# =========================
+# FINANCIAMENTO – MODELO REAL
+# =========================
 def calcular_financiamento(valor, taxa, prazo, modelo):
-    if modelo == "Price":
-        parcela = valor * (taxa * (1 + taxa) ** prazo) / ((1 + taxa) ** prazo - 1)
-        total_pago = parcela * prazo
-        juros_totais = total_pago - valor
-        return parcela, parcela, total_pago, juros_totais
+    saldo = valor
+    parcelas = []
 
-    else:  # SAC
+    if modelo == "SAC":
         amortizacao = valor / prazo
-        parcelas = []
-        saldo = valor
 
         for _ in range(prazo):
             juros = saldo * taxa
-            parcela_mes = amortizacao + juros
-            parcelas.append(parcela_mes)
+            parcela = amortizacao + juros
+            parcelas.append(parcela)
             saldo -= amortizacao
 
-        total_pago = sum(parcelas)
-        juros_totais = total_pago - valor
+    else:  # PRICE
+        parcela_fixa = valor * (taxa * (1 + taxa) ** prazo) / ((1 + taxa) ** prazo - 1)
 
-        return parcelas[0], parcelas[-1], total_pago, juros_totais
+        for _ in range(prazo):
+            juros = saldo * taxa
+            amortizacao = parcela_fixa - juros
+            parcelas.append(parcela_fixa)
+            saldo -= amortizacao
+
+    total_pago = sum(parcelas)
+    juros_totais = total_pago - valor
+
+    return parcelas[0], parcelas[-1], total_pago, juros_totais
 
 
 # =========================
@@ -230,6 +237,8 @@ st.markdown(
     '<div class="footer">Desenvolvido por Victor • Intelligence Banking 2026</div>',
     unsafe_allow_html=True
 )
+
+
 
 
 
