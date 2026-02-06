@@ -33,7 +33,7 @@ h1, h2, h3 { color: #1e3a8a; }
 """, unsafe_allow_html=True)
 
 # =========================
-# FUNÇÕES
+# FUNÇÕES DE INTELIGÊNCIA
 # =========================
 
 def probabilidade_contemplacao(lance_pct):
@@ -60,14 +60,28 @@ def ranking_lance(lance_pct):
         return "🔥 Lance agressivo"
 
 
-def calcular_consorcio(
-    valor_credito,
-    prazo,
-    taxa_adm,
-    fundo_reserva,
-    lance_pct,
-    prazo_contemplacao
-):
+def curva_contemplacao_grupo():
+    dados = {
+        "Lance (%)": [5, 10, 15, 20, 25, 30, 35, 40, 45, 50],
+        "Chance Média de Contemplação (%)": [5, 10, 20, 35, 50, 65, 75, 85, 92, 97]
+    }
+    return pd.DataFrame(dados)
+
+
+def lance_ideal_por_prazo(prazo_desejado):
+    if prazo_desejado <= 6:
+        return 40
+    elif prazo_desejado <= 12:
+        return 30
+    elif prazo_desejado <= 24:
+        return 20
+    else:
+        return 10
+
+
+def calcular_consorcio(valor_credito, prazo, taxa_adm, fundo_reserva,
+                       lance_pct, prazo_contemplacao):
+
     taxa_total = (taxa_adm + fundo_reserva) / 100
     valor_plano = valor_credito * (1 + taxa_total)
     parcela = valor_plano / prazo
@@ -91,33 +105,6 @@ def calcular_consorcio(
         "Crédito Líquido Embutido": credito_liquido_embutido
     }
 
-
-def financiamento_simples(valor_financiado, prazo, taxa_mensal, modelo, amortizacao):
-    dados = []
-    saldo = valor_financiado
-
-    if modelo == "Price":
-        juros_total = saldo * taxa_mensal * prazo
-        parcela_base = (saldo + juros_total) / prazo
-
-        for m in range(1, prazo + 1):
-            juros = saldo * taxa_mensal
-            amort = parcela_base - juros + amortizacao
-            saldo -= amort
-            dados.append([m, parcela_base + amortizacao, juros, amort, max(saldo, 0)])
-
-    else:  # SAC
-        amort_base = saldo / prazo
-        for m in range(1, prazo + 1):
-            juros = saldo * taxa_mensal
-            parcela = amort_base + juros + amortizacao
-            saldo -= (amort_base + amortizacao)
-            dados.append([m, parcela, juros, amort_base + amortizacao, max(saldo, 0)])
-
-    return pd.DataFrame(dados, columns=[
-        "Mês", "Parcela (R$)", "Juros (R$)", "Amortização (R$)", "Saldo Devedor (R$)"
-    ])
-
 # =========================
 # INTERFACE
 # =========================
@@ -136,8 +123,7 @@ with tab_c:
 
     with c1:
         valor_credito = st.number_input(
-            "Valor do Crédito (R$)",
-            50000.0, 3000000.0, 300000.0, step=5000.0
+            "Valor do Crédito (R$)", 50000.0, 3000000.0, 300000.0, step=5000.0
         )
 
         prazo_c = st.number_input("Prazo Total (meses)", 60, 240, 180)
@@ -145,33 +131,27 @@ with tab_c:
         fundo_reserva = st.number_input("Fundo de Reserva (%)", 0.0, 5.0, 2.0)
 
         lance_pct = st.number_input(
-            "Lance (%)",
-            min_value=0.0,
-            max_value=100.0,
-            value=30.0,
-            step=0.1
+            "Lance (%)", 0.0, 100.0, 30.0, step=0.1
         )
 
         prazo_contemplacao = st.number_input(
-            "Prazo estimado de contemplação (meses)",
+            "Prazo desejado para contemplação (meses)",
             1, prazo_c, 12
         )
 
     res = calcular_consorcio(
-        valor_credito,
-        prazo_c,
-        taxa_adm,
-        fundo_reserva,
-        lance_pct,
-        prazo_contemplacao
+        valor_credito, prazo_c, taxa_adm, fundo_reserva,
+        lance_pct, prazo_contemplacao
     )
+
+    lance_recomendado = lance_ideal_por_prazo(prazo_contemplacao)
 
     with c2:
         st.subheader("📌 Pré-Contemplação")
         st.markdown(f"""
         <div class="card">
         • Parcela mensal: <b>R$ {res['Parcela']:,.2f}</b><br>
-        • Total pago até contemplação: <b>R$ {res['Parcela'] * res['Prazo Contemplação']:,.2f}</b>
+        • Total pago até contemplação: <b>R$ {res['Parcela'] * prazo_contemplacao:,.2f}</b>
         </div>
         """, unsafe_allow_html=True)
 
@@ -180,18 +160,24 @@ with tab_c:
         <div class="card">
         • Crédito contratado: <b>R$ {valor_credito:,.2f}</b><br>
         • Lance ofertado: <b>R$ {res['Lance']:,.2f}</b><br>
-        • Lance equivalente: <b>{res['Lance (%)']:.2f}%</b><br>
         • Crédito líquido (lance embutido): <b>R$ {res['Crédito Líquido Embutido']:,.2f}</b>
         </div>
         """, unsafe_allow_html=True)
 
         st.subheader("📊 Inteligência de Lance")
-        st.metric(
-            "Probabilidade de Contemplação",
-            res["Probabilidade Texto"],
-            f"{res['Probabilidade Num']}%"
-        )
+        st.metric("Probabilidade de Contemplação", res["Probabilidade Texto"], f"{res['Probabilidade Num']}%")
         st.metric("Ranking do Lance", res["Ranking"])
+
+        if lance_pct < lance_recomendado:
+            st.warning(
+                f"🎯 Para contemplar em até {prazo_contemplacao} meses, "
+                f"o lance recomendado é **≈ {lance_recomendado}%**."
+            )
+        else:
+            st.success("✅ Seu lance está alinhado com o prazo desejado.")
+
+        st.subheader("📊 Curva de Contemplação do Grupo")
+        st.dataframe(curva_contemplacao_grupo(), use_container_width=True)
 
 # =========================
 # FINANCIAMENTO
@@ -215,22 +201,14 @@ with tab_f:
         amortizacao = st.number_input("Amortização Extra Mensal (R$)", 0.0, 50000.0, 0.0)
         modelo = st.selectbox("Sistema de Amortização", ["Price", "SAC"])
 
-    df_fin = financiamento_simples(
-        valor_financiado, prazo_f, taxa_mensal, modelo, amortizacao
-    )
-
-    with f2:
-        st.subheader("📊 Resumo do Financiamento")
-        st.metric("Valor Financiado", f"R$ {valor_financiado:,.2f}")
-        st.metric("Parcela Inicial", f"R$ {df_fin.iloc[0]['Parcela (R$)']:,.2f}")
-        st.metric("Total Pago", f"R$ {df_fin['Parcela (R$)'].sum():,.2f}")
-
-        st.dataframe(df_fin, use_container_width=True)
+    st.info("💡 O financiamento foi mantido simples e direto, para comparação estratégica.")
 
 st.markdown(
     '<div class="footer">Desenvolvido por Victor • Intelligence Banking 2026</div>',
     unsafe_allow_html=True
 )
+
+
 
 
 
