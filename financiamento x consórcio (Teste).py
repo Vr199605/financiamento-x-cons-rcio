@@ -1,212 +1,170 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 
 # =========================
 # CONFIGURAÇÃO DA PÁGINA
 # =========================
 st.set_page_config(
-    page_title="Intelligence Banking Pro",
+    page_title="Simulador Institucional | InvestSmartXP",
     page_icon="💎",
     layout="wide"
 )
 
-st.markdown("""
-<style>
-.main { background-color: #f8f9fa; }
-.card {
-    background-color: white;
-    padding: 20px;
-    border-radius: 12px;
-    border: 1px solid #e5e7eb;
-    margin-bottom: 15px;
-}
-.footer {
-    position: fixed;
-    bottom: 0;
-    width: 100%;
-    text-align: center;
-    color: gray;
-    padding: 8px;
-}
-h1, h2, h3 { color: #1e3a8a; }
-</style>
-""", unsafe_allow_html=True)
+st.title("💎 Simulador Institucional – Consórcio x Financiamento")
+st.caption("Modelo educacional, comparativo e estratégico")
 
 # =========================
-# FUNÇÕES DE INTELIGÊNCIA
+# INPUTS PRINCIPAIS
 # =========================
+st.subheader("📥 Dados da Simulação")
 
-def probabilidade_contemplacao(lance_pct):
-    if lance_pct < 10:
-        return "Muito Baixa", 10
-    elif lance_pct < 20:
-        return "Baixa", 25
-    elif lance_pct < 30:
-        return "Média", 50
-    elif lance_pct < 40:
-        return "Alta", 75
-    else:
-        return "Muito Alta", 90
+col1, col2, col3 = st.columns(3)
 
+with col1:
+    valor_bem = st.number_input("Valor do Bem (R$)", min_value=50000.0, step=5000.0)
 
-def ranking_lance(lance_pct):
-    if lance_pct < 15:
-        return "🔴 Pouco competitivo"
-    elif lance_pct < 30:
-        return "🟡 Competitivo"
-    elif lance_pct < 45:
-        return "🟢 Muito competitivo"
-    else:
-        return "🔥 Lance agressivo"
+with col2:
+    prazo = st.selectbox("Prazo (meses)", [120, 150, 180, 200])
 
+with col3:
+    taxa_adm = st.number_input("Taxa de Administração (%)", value=20.0)
 
-def curva_contemplacao_grupo():
-    dados = {
-        "Lance (%)": [5, 10, 15, 20, 25, 30, 35, 40, 45, 50],
-        "Chance Média de Contemplação (%)": [5, 10, 20, 35, 50, 65, 75, 85, 92, 97]
-    }
-    return pd.DataFrame(dados)
+lance_percentual = st.number_input(
+    "🎯 Lance em Percentual (%)",
+    min_value=0.0,
+    max_value=100.0,
+    step=0.5
+)
 
+perfil = st.selectbox(
+    "Perfil do Cliente",
+    ["Conservador", "Moderado", "Agressivo"]
+)
 
-def lance_ideal_por_prazo(prazo_desejado):
-    if prazo_desejado <= 6:
-        return 40
-    elif prazo_desejado <= 12:
-        return 30
-    elif prazo_desejado <= 24:
-        return 20
-    else:
-        return 10
-
-
-def calcular_consorcio(valor_credito, prazo, taxa_adm, fundo_reserva,
-                       lance_pct, prazo_contemplacao):
-
-    taxa_total = (taxa_adm + fundo_reserva) / 100
-    valor_plano = valor_credito * (1 + taxa_total)
-    parcela = valor_plano / prazo
-
-    lance = valor_credito * (lance_pct / 100)
-
-    prob_texto, prob_num = probabilidade_contemplacao(lance_pct)
-    ranking = ranking_lance(lance_pct)
-
-    credito_liquido_embutido = valor_credito - lance
-
-    return {
-        "Parcela": parcela,
-        "Valor Plano": valor_plano,
-        "Lance": lance,
-        "Lance (%)": lance_pct,
-        "Probabilidade Texto": prob_texto,
-        "Probabilidade Num": prob_num,
-        "Ranking": ranking,
-        "Prazo Contemplação": prazo_contemplacao,
-        "Crédito Líquido Embutido": credito_liquido_embutido
-    }
-
-# =========================
-# INTERFACE
-# =========================
-
-st.title("💎 Intelligence Banking – Simulador Profissional")
-
-tab_c, tab_f = st.tabs(["🤝 Consórcio", "🏦 Financiamento"])
+st.divider()
 
 # =========================
 # CONSÓRCIO
 # =========================
-with tab_c:
-    st.header("Simulador de Consórcio")
+st.subheader("📊 Simulação de Consórcio")
 
-    c1, c2 = st.columns([1, 2])
+valor_total_consorcio = valor_bem * (1 + taxa_adm / 100)
+parcela_consorcio = valor_total_consorcio / prazo
+valor_lance = valor_bem * (lance_percentual / 100)
 
-    with c1:
-        valor_credito = st.number_input(
-            "Valor do Crédito (R$)", 50000.0, 3000000.0, 300000.0, step=5000.0
-        )
+# =========================
+# CURVA DE CONTEMPLAÇÃO
+# =========================
+st.subheader("📊 Curva de Contemplação por Grupo")
 
-        prazo_c = st.number_input("Prazo Total (meses)", 60, 240, 180)
-        taxa_adm = st.number_input("Taxa de Administração (%)", 5.0, 30.0, 15.0)
-        fundo_reserva = st.number_input("Fundo de Reserva (%)", 0.0, 5.0, 2.0)
+meses = np.arange(1, prazo + 1)
 
-        lance_pct = st.number_input(
-            "Lance (%)", 0.0, 100.0, 30.0, step=0.1
-        )
+base_chance = {
+    "Conservador": 0.15,
+    "Moderado": 0.25,
+    "Agressivo": 0.35
+}[perfil]
 
-        prazo_contemplacao = st.number_input(
-            "Prazo desejado para contemplação (meses)",
-            1, prazo_c, 12
-        )
+chance_contemplacao = np.clip(
+    base_chance + (lance_percentual / 100) * np.log(meses + 1),
+    0,
+    0.95
+)
 
-    res = calcular_consorcio(
-        valor_credito, prazo_c, taxa_adm, fundo_reserva,
-        lance_pct, prazo_contemplacao
-    )
+df_curva = pd.DataFrame({
+    "Mês": meses,
+    "Chance de Contemplação (%)": chance_contemplacao * 100
+})
 
-    lance_recomendado = lance_ideal_por_prazo(prazo_contemplacao)
+st.line_chart(df_curva.set_index("Mês"))
 
-    with c2:
-        st.subheader("📌 Pré-Contemplação")
-        st.markdown(f"""
-        <div class="card">
-        • Parcela mensal: <b>R$ {res['Parcela']:,.2f}</b><br>
-        • Total pago até contemplação: <b>R$ {res['Parcela'] * prazo_contemplacao:,.2f}</b>
-        </div>
-        """, unsafe_allow_html=True)
+# =========================
+# RECOMENDAÇÃO AUTOMÁTICA
+# =========================
+st.subheader("🎯 Recomendação Automática de Lance Ideal")
 
-        st.subheader("🚀 Pós-Contemplação")
-        st.markdown(f"""
-        <div class="card">
-        • Crédito contratado: <b>R$ {valor_credito:,.2f}</b><br>
-        • Lance ofertado: <b>R$ {res['Lance']:,.2f}</b><br>
-        • Crédito líquido (lance embutido): <b>R$ {res['Crédito Líquido Embutido']:,.2f}</b>
-        </div>
-        """, unsafe_allow_html=True)
+if perfil == "Conservador":
+    lance_ideal = 25
+elif perfil == "Moderado":
+    lance_ideal = 35
+else:
+    lance_ideal = 45
 
-        st.subheader("📊 Inteligência de Lance")
-        st.metric("Probabilidade de Contemplação", res["Probabilidade Texto"], f"{res['Probabilidade Num']}%")
-        st.metric("Ranking do Lance", res["Ranking"])
+chance_atual = chance_contemplacao[11] * 100  # mês 12 como referência
 
-        if lance_pct < lance_recomendado:
-            st.warning(
-                f"🎯 Para contemplar em até {prazo_contemplacao} meses, "
-                f"o lance recomendado é **≈ {lance_recomendado}%**."
-            )
-        else:
-            st.success("✅ Seu lance está alinhado com o prazo desejado.")
-
-        st.subheader("📊 Curva de Contemplação do Grupo")
-        st.dataframe(curva_contemplacao_grupo(), use_container_width=True)
+st.metric("Lance Ideal Sugerido (%)", f"{lance_ideal}%")
+st.metric("Chance Estimada até o 12º mês", f"{chance_atual:.1f}%")
 
 # =========================
 # FINANCIAMENTO
 # =========================
-with tab_f:
-    st.header("Simulador de Financiamento")
+st.subheader("🏦 Simulação de Financiamento")
 
-    f1, f2 = st.columns([1, 2])
+colf1, colf2 = st.columns(2)
 
-    with f1:
-        valor_bem = st.number_input("Valor do Bem (R$)", 100000.0, 5000000.0, 500000.0)
-        entrada = st.number_input("Entrada (R$)", 0.0, valor_bem * 0.8, valor_bem * 0.2)
-        valor_financiado = valor_bem - entrada
+with colf1:
+    taxa_juros = st.number_input("Taxa de Juros Mensal (%)", value=1.2)
 
-        if valor_financiado > valor_bem * 0.8:
-            st.error("⚠️ Financiamento limitado a 80% do valor do bem.")
-            st.stop()
+with colf2:
+    prazo_fin = st.selectbox("Prazo do Financiamento (meses)", [120, 180, 240, 360])
 
-        prazo_f = st.number_input("Prazo (meses)", 12, 420, 240)
-        taxa_mensal = st.number_input("Taxa de Juros Mensal (%)", 0.5, 3.0, 1.2) / 100
-        amortizacao = st.number_input("Amortização Extra Mensal (R$)", 0.0, 50000.0, 0.0)
-        modelo = st.selectbox("Sistema de Amortização", ["Price", "SAC"])
+juros = taxa_juros / 100
 
-    st.info("💡 O financiamento foi mantido simples e direto, para comparação estratégica.")
-
-st.markdown(
-    '<div class="footer">Desenvolvido por Victor • Intelligence Banking 2026</div>',
-    unsafe_allow_html=True
+parcela_fin = valor_bem * (
+    (juros * (1 + juros) ** prazo_fin) /
+    ((1 + juros) ** prazo_fin - 1)
 )
+
+total_financiamento = parcela_fin * prazo_fin
+
+# =========================
+# COMPARATIVO FINAL
+# =========================
+st.divider()
+st.subheader("📈 Comparativo Final")
+
+colc1, colc2, colc3 = st.columns(3)
+
+with colc1:
+    st.metric("Parcela Consórcio", f"R$ {parcela_consorcio:,.2f}")
+
+with colc2:
+    st.metric("Parcela Financiamento", f"R$ {parcela_fin:,.2f}")
+
+with colc3:
+    economia = total_financiamento - valor_total_consorcio
+    st.metric("Economia com Consórcio", f"R$ {economia:,.2f}")
+
+# =========================
+# SCORE DE VANTAGEM
+# =========================
+st.subheader("📊 Score de Vantagem do Consórcio")
+
+score = 0
+
+if economia > 0:
+    score += 40
+
+if lance_percentual >= lance_ideal:
+    score += 30
+
+if parcela_consorcio < parcela_fin:
+    score += 30
+
+st.progress(score / 100)
+
+st.write(f"**Score Final:** {score}/100")
+
+if score >= 70:
+    st.success("✅ Consórcio altamente vantajoso para este perfil.")
+elif score >= 40:
+    st.warning("⚠️ Consórcio pode ser vantajoso, dependendo da estratégia.")
+else:
+    st.error("❌ Financiamento pode ser mais adequado neste cenário.")
+
+st.caption("Simulador educacional – InvestSmartXP")
+
 
 
 
