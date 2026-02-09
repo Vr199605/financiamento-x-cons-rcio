@@ -45,49 +45,29 @@ def score_estrategia(custo_total, prazo, parcela):
     return max(0, round(score, 1))
 
 
-def calcular_consorcio(
-    valor_credito, prazo, taxa_adm, fundo_reserva,
-    lance_embutido_pct, lance_livre, lance_fixo,
-    parcelas_pagas
-):
+def calcular_consorcio(valor_credito, prazo, taxa_adm, fundo_reserva,
+                       lance_embutido_pct, lance_livre, lance_fixo):
+
     taxa_total = (taxa_adm + fundo_reserva) / 100
     valor_plano = valor_credito * (1 + taxa_total)
     parcela = valor_plano / prazo
-
-    total_pago = parcelas_pagas * parcela
-    saldo_devedor = valor_plano - total_pago
 
     lance_embutido = valor_credito * (lance_embutido_pct / 100)
     lance_total = lance_embutido + lance_livre + lance_fixo
     credito_liquido = valor_credito - lance_embutido
 
-    # Curva de saldo devedor
-    saldos = []
-    saldo = valor_plano
-    for _ in range(prazo):
-        saldo -= parcela
-        saldos.append(max(saldo, 0))
-
-    df_saldo = pd.DataFrame({
-        "Parcela": range(1, prazo + 1),
-        "Saldo Devedor": saldos
-    })
-
     return {
         "Parcela": parcela,
         "Valor Plano": valor_plano,
-        "Saldo Devedor": saldo_devedor,
         "Lance Total": lance_total,
         "Lance Embutido": lance_embutido,
-        "Crédito Líquido": credito_liquido,
-        "DF Saldo": df_saldo
+        "Crédito Líquido": credito_liquido
     }
 
 
 def calcular_financiamento(valor, taxa_mensal, prazo, modelo):
     saldo = valor
     parcelas = []
-    saldos = []
 
     if modelo == "SAC":
         amortizacao = valor / prazo
@@ -96,7 +76,6 @@ def calcular_financiamento(valor, taxa_mensal, prazo, modelo):
             parcela = amortizacao + juros
             parcelas.append(parcela)
             saldo -= amortizacao
-            saldos.append(max(saldo, 0))
     else:
         parcela_fixa = valor * (taxa_mensal * (1 + taxa_mensal) ** prazo) / ((1 + taxa_mensal) ** prazo - 1)
         for _ in range(prazo):
@@ -104,18 +83,11 @@ def calcular_financiamento(valor, taxa_mensal, prazo, modelo):
             amortizacao = parcela_fixa - juros
             parcelas.append(parcela_fixa)
             saldo -= amortizacao
-            saldos.append(max(saldo, 0))
 
     total_pago = sum(parcelas)
     juros_totais = total_pago - valor
 
-    df_saldo = pd.DataFrame({
-        "Parcela": range(1, prazo + 1),
-        "Saldo Devedor": saldos
-    })
-
-    return parcelas[0], parcelas[-1], total_pago, juros_totais, df_saldo
-
+    return parcelas[0], parcelas[-1], total_pago, juros_totais
 
 # =========================
 # INTERFACE
@@ -123,8 +95,8 @@ def calcular_financiamento(valor, taxa_mensal, prazo, modelo):
 
 st.title("💎 Intelligence Banking – Simulador Profissional")
 
-tab_cons, tab_fin, tab_comp, tab_txt = st.tabs(
-    ["🤝 Consórcio", "🏦 Financiamento", "🔄 Comparação", "📄 Proposta (.txt)"]
+tab_cons, tab_fin, tab_comp, tab_txt, tab_exp = st.tabs(
+    ["🤝 Consórcio", "🏦 Financiamento", "🔄 Comparação", "📄 Proposta (.txt)", "📘 Como os cálculos funcionam"]
 )
 
 # =========================
@@ -141,11 +113,6 @@ with tab_cons:
         taxa_adm = st.number_input("Taxa de Administração (%)", 5.0, 30.0, 15.0)
         fundo_reserva = st.number_input("Fundo de Reserva (%)", 0.0, 5.0, 2.0)
 
-        parcelas_pagas = st.number_input(
-            "Parcelas já pagas (pré-contemplação)",
-            0, prazo_c, 0
-        )
-
         st.subheader("💰 Lances")
         lance_embutido_pct = st.number_input("Lance Embutido (%)", 0.0, 100.0, 20.0, step=0.1)
         lance_livre = st.number_input("Lance Livre (R$)", 0.0, 5000000.0, 0.0)
@@ -153,23 +120,17 @@ with tab_cons:
 
     res_c = calcular_consorcio(
         valor_credito, prazo_c, taxa_adm, fundo_reserva,
-        lance_embutido_pct, lance_livre, lance_fixo,
-        parcelas_pagas
+        lance_embutido_pct, lance_livre, lance_fixo
     )
 
     with c2:
         st.markdown(f"""
         <div class="card">
         • Parcela mensal: <b>R$ {res_c['Parcela']:,.2f}</b><br>
-        • Parcelas pagas: <b>{parcelas_pagas}</b><br>
-        • Saldo devedor atual: <b>R$ {res_c['Saldo Devedor']:,.2f}</b><br>
         • Lance total: <b>R$ {res_c['Lance Total']:,.2f}</b><br>
         • Crédito líquido após lance embutido: <b>R$ {res_c['Crédito Líquido']:,.2f}</b>
         </div>
         """, unsafe_allow_html=True)
-
-        st.subheader("📊 Saldo Devedor do Consórcio")
-        st.line_chart(res_c["DF Saldo"].set_index("Parcela"))
 
 # =========================
 # FINANCIAMENTO
@@ -194,7 +155,7 @@ with tab_fin:
     taxa_mensal = (1 + juros_anual) ** (1 / 12) - 1
     valor_financiado = valor_bem - entrada
 
-    p_ini, p_fim, total_pago, juros, df_fin = calcular_financiamento(
+    p_ini, p_fim, total_pago, juros = calcular_financiamento(
         valor_financiado, taxa_mensal, prazo_f, modelo
     )
 
@@ -207,9 +168,6 @@ with tab_fin:
         • Total pago: <b>R$ {total_pago:,.2f}</b>
         </div>
         """, unsafe_allow_html=True)
-
-        st.subheader("📉 Saldo Devedor do Financiamento")
-        st.line_chart(df_fin.set_index("Parcela"))
 
 # =========================
 # COMPARAÇÃO
@@ -241,8 +199,6 @@ PROPOSTA FINANCEIRA – INTELLIGENCE BANKING
 CONSÓRCIO
 Valor do crédito: R$ {valor_credito:,.2f}
 Parcela mensal: R$ {res_c['Parcela']:,.2f}
-Parcelas pagas: {parcelas_pagas}
-Saldo devedor: R$ {res_c['Saldo Devedor']:,.2f}
 Lance total: R$ {res_c['Lance Total']:,.2f}
 Crédito líquido: R$ {res_c['Crédito Líquido']:,.2f}
 
@@ -264,12 +220,47 @@ Estratégia indicada: {"CONSÓRCIO" if score_cons > score_fin else "FINANCIAMENT
     )
 
 # =========================
+# EXPLICAÇÃO DIDÁTICA
+# =========================
+with tab_exp:
+    st.header("📘 Como os cálculos funcionam")
+
+    st.markdown("""
+### 🤝 Consórcio
+- **Parcela mensal** = (Valor do crédito + taxas) ÷ prazo  
+- **Taxa total** = taxa de administração + fundo de reserva  
+- **Lance embutido**: percentual do crédito usado como lance  
+- **Crédito líquido** = valor do crédito − lance embutido  
+⚠️ Lance livre e fixo **não descontam** do crédito.
+
+---
+
+### 🏦 Financiamento
+- O cliente informa a **taxa anual**
+- O sistema converte para **taxa mensal equivalente**
+- **Tabela SAC**: amortização fixa, parcelas decrescentes  
+- **Tabela Price**: parcela fixa, juros maiores no início  
+
+---
+
+### 🧠 Score de Estratégia
+O score começa em **100 pontos** e perde pontos conforme:
+- 💰 Custo total da operação
+- 📆 Prazo do contrato
+- 💸 Valor da parcela inicial  
+
+👉 Quanto **maior o score**, melhor a estratégia financeira.
+""")
+
+# =========================
 # RODAPÉ
 # =========================
 st.markdown(
     '<div class="footer">Desenvolvido por Victor • Intelligence Banking 2026</div>',
     unsafe_allow_html=True
 )
+
+
 
 
 
