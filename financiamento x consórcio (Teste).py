@@ -3,16 +3,6 @@ import pandas as pd
 import numpy as np
 
 # =========================
-# TENTATIVA DE IMPORTAÇÃO PDF
-# =========================
-PDF_DISPONIVEL = True
-try:
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-    from reportlab.lib.styles import getSampleStyleSheet
-except ModuleNotFoundError:
-    PDF_DISPONIVEL = False
-
-# =========================
 # CONFIGURAÇÃO DA PÁGINA
 # =========================
 st.set_page_config(
@@ -44,7 +34,7 @@ h1, h2, h3 { color: #1e3a8a; }
 """, unsafe_allow_html=True)
 
 # =========================
-# FUNÇÕES DE INTELIGÊNCIA
+# FUNÇÕES
 # =========================
 
 def score_estrategia(custo_total, prazo, parcela):
@@ -75,21 +65,21 @@ def calcular_consorcio(valor_credito, prazo, taxa_adm, fundo_reserva,
     }
 
 
-def calcular_financiamento(valor, taxa, prazo, modelo):
+def calcular_financiamento(valor, taxa_mensal, prazo, modelo):
     saldo = valor
     parcelas = []
 
     if modelo == "SAC":
         amortizacao = valor / prazo
         for _ in range(prazo):
-            juros = saldo * taxa
+            juros = saldo * taxa_mensal
             parcela = amortizacao + juros
             parcelas.append(parcela)
             saldo -= amortizacao
     else:
-        parcela_fixa = valor * (taxa * (1 + taxa) ** prazo) / ((1 + taxa) ** prazo - 1)
+        parcela_fixa = valor * (taxa_mensal * (1 + taxa_mensal) ** prazo) / ((1 + taxa_mensal) ** prazo - 1)
         for _ in range(prazo):
-            juros = saldo * taxa
+            juros = saldo * taxa_mensal
             amortizacao = parcela_fixa - juros
             parcelas.append(parcela_fixa)
             saldo -= amortizacao
@@ -97,7 +87,7 @@ def calcular_financiamento(valor, taxa, prazo, modelo):
     total_pago = sum(parcelas)
     juros_totais = total_pago - valor
 
-    return parcelas[0], parcelas[-1], total_pago, juros_totais, parcelas
+    return parcelas[0], parcelas[-1], total_pago, juros_totais
 
 # =========================
 # INTERFACE
@@ -105,8 +95,8 @@ def calcular_financiamento(valor, taxa, prazo, modelo):
 
 st.title("💎 Intelligence Banking – Simulador Profissional")
 
-tab_cons, tab_fin, tab_comp, tab_pdf = st.tabs(
-    ["🤝 Consórcio", "🏦 Financiamento", "🔄 Comparação", "📄 Proposta PDF"]
+tab_cons, tab_fin, tab_comp, tab_txt = st.tabs(
+    ["🤝 Consórcio", "🏦 Financiamento", "🔄 Comparação", "📄 Proposta (.txt)"]
 )
 
 # =========================
@@ -136,9 +126,9 @@ with tab_cons:
     with c2:
         st.markdown(f"""
         <div class="card">
-        • Parcela: <b>R$ {res_c['Parcela']:,.2f}</b><br>
+        • Parcela mensal: <b>R$ {res_c['Parcela']:,.2f}</b><br>
         • Lance total: <b>R$ {res_c['Lance Total']:,.2f}</b><br>
-        • Crédito líquido pós-lance embutido: <b>R$ {res_c['Crédito Líquido']:,.2f}</b>
+        • Crédito líquido após lance embutido: <b>R$ {res_c['Crédito Líquido']:,.2f}</b>
         </div>
         """, unsafe_allow_html=True)
 
@@ -154,17 +144,25 @@ with tab_fin:
         valor_bem = st.number_input("Valor do Bem (R$)", 100000.0, 5000000.0, 500000.0)
         entrada = st.number_input("Entrada (R$)", 0.0, valor_bem * 0.9, valor_bem * 0.2)
         prazo_f = st.number_input("Prazo (meses)", 12, 420, 240)
-        taxa = st.number_input("Juros Mensal (%)", 0.5, 3.0, 1.2) / 100
-        modelo = st.selectbox("Sistema", ["Price", "SAC"])
 
+        juros_anual = st.number_input(
+            "Taxa de Juros Anual (%)",
+            1.0, 30.0, 12.0
+        ) / 100
+
+        modelo = st.selectbox("Sistema de Amortização", ["Price", "SAC"])
+
+    taxa_mensal = (1 + juros_anual) ** (1 / 12) - 1
     valor_financiado = valor_bem - entrada
-    p_ini, p_fim, total_pago, juros, parcelas = calcular_financiamento(
-        valor_financiado, taxa, prazo_f, modelo
+
+    p_ini, p_fim, total_pago, juros = calcular_financiamento(
+        valor_financiado, taxa_mensal, prazo_f, modelo
     )
 
     with f2:
         st.markdown(f"""
         <div class="card">
+        • Valor financiado: <b>R$ {valor_financiado:,.2f}</b><br>
         • Parcela inicial: <b>R$ {p_ini:,.2f}</b><br>
         • Parcela final: <b>R$ {p_fim:,.2f}</b><br>
         • Total pago: <b>R$ {total_pago:,.2f}</b>
@@ -172,10 +170,10 @@ with tab_fin:
         """, unsafe_allow_html=True)
 
 # =========================
-# COMPARAÇÃO INTELIGENTE
+# COMPARAÇÃO
 # =========================
 with tab_comp:
-    st.header("🔄 Comparação Automática")
+    st.header("🔄 Comparação Inteligente")
 
     score_cons = score_estrategia(res_c["Valor Plano"], prazo_c, res_c["Parcela"])
     score_fin = score_estrategia(total_pago, prazo_f, p_ini)
@@ -189,28 +187,37 @@ with tab_comp:
         st.success("🎯 Estratégia recomendada: FINANCIAMENTO")
 
 # =========================
-# PROPOSTA PDF
+# PROPOSTA TXT
 # =========================
-with tab_pdf:
-    st.header("📄 Proposta Automática")
+with tab_txt:
+    st.header("📄 Gerar Proposta (.txt)")
 
-    if not PDF_DISPONIVEL:
-        st.warning(
-            "⚠️ Exportação em PDF indisponível.\n\n"
-            "Instale o pacote **reportlab** no requirements.txt para liberar essa função."
-        )
-    else:
-        if st.button("📄 Gerar Proposta em PDF"):
-            styles = getSampleStyleSheet()
-            doc = SimpleDocTemplate("proposta.pdf")
-            story = [
-                Paragraph("<b>Proposta Financeira - Intelligence Banking</b>", styles["Title"]),
-                Spacer(1, 12),
-                Paragraph(f"Parcela Consórcio: R$ {res_c['Parcela']:,.2f}", styles["Normal"]),
-                Paragraph(f"Total Financiamento: R$ {total_pago:,.2f}", styles["Normal"]),
-            ]
-            doc.build(story)
-            st.success("✅ Proposta PDF gerada com sucesso.")
+    proposta = f"""
+PROPOSTA FINANCEIRA – INTELLIGENCE BANKING
+----------------------------------------
+
+CONSÓRCIO
+Valor do crédito: R$ {valor_credito:,.2f}
+Parcela mensal: R$ {res_c['Parcela']:,.2f}
+Lance total: R$ {res_c['Lance Total']:,.2f}
+Crédito líquido: R$ {res_c['Crédito Líquido']:,.2f}
+
+FINANCIAMENTO
+Valor financiado: R$ {valor_financiado:,.2f}
+Sistema: {modelo}
+Parcela inicial: R$ {p_ini:,.2f}
+Parcela final: R$ {p_fim:,.2f}
+Total pago: R$ {total_pago:,.2f}
+
+RECOMENDAÇÃO
+Estratégia indicada: {"CONSÓRCIO" if score_cons > score_fin else "FINANCIAMENTO"}
+"""
+
+    st.download_button(
+        "⬇️ Baixar Proposta em TXT",
+        proposta,
+        file_name="proposta_intelligence_banking.txt"
+    )
 
 # =========================
 # RODAPÉ
@@ -219,6 +226,8 @@ st.markdown(
     '<div class="footer">Desenvolvido por Victor • Intelligence Banking 2026</div>',
     unsafe_allow_html=True
 )
+
+
 
 
 
