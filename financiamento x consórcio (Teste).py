@@ -1,9 +1,15 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.colors import HexColor
+from reportlab.lib.units import cm
+import tempfile
 
 # =========================
-# CONFIGURAÇÃO DA PÁGINA
+# CONFIGURAÇÃO
 # =========================
 st.set_page_config(
     page_title="Intelligence Banking Pro",
@@ -16,197 +22,170 @@ st.markdown("""
 .main { background-color: #f8f9fa; }
 .card {
     background-color: white;
-    padding: 20px;
+    padding: 18px;
     border-radius: 12px;
     border: 1px solid #e5e7eb;
     margin-bottom: 15px;
-}
-.footer {
-    position: fixed;
-    bottom: 0;
-    width: 100%;
-    text-align: center;
-    color: gray;
-    padding: 8px;
 }
 h1, h2, h3 { color: #1e3a8a; }
 </style>
 """, unsafe_allow_html=True)
 
+st.title("💎 Intelligence Banking – Simulador Estratégico")
+
 # =========================
-# FUNÇÕES – CONSÓRCIO
+# MODO
 # =========================
-def probabilidade_contemplacao(lance_pct):
-    if lance_pct < 10: return "Muito Baixa", 10
-    if lance_pct < 20: return "Baixa", 25
-    if lance_pct < 30: return "Média", 50
-    if lance_pct < 40: return "Alta", 75
-    return "Muito Alta", 90
+modo = st.radio("Modo de Visualização", ["👤 Cliente", "🧑‍💼 Consultor"], horizontal=True)
 
-def ranking_lance(lance_pct):
-    if lance_pct < 15: return "🔴 Pouco competitivo"
-    if lance_pct < 30: return "🟡 Competitivo"
-    if lance_pct < 45: return "🟢 Muito competitivo"
-    return "🔥 Lance agressivo"
-
-def lance_ideal_por_prazo(prazo):
-    if prazo <= 6: return 40
-    if prazo <= 12: return 30
-    if prazo <= 24: return 20
-    return 10
-
-def calcular_consorcio(valor, prazo, taxa_adm, fundo, lance_pct, prazo_cont):
+# =========================
+# FUNÇÕES
+# =========================
+def calcular_consorcio(valor, prazo, taxa_adm, fundo, emb_pct, livre, fixo):
     taxa_total = (taxa_adm + fundo) / 100
-    plano = valor * (1 + taxa_total)
-    parcela = plano / prazo
-    lance = valor * (lance_pct / 100)
-    prob_txt, prob_num = probabilidade_contemplacao(lance_pct)
+    valor_plano = valor * (1 + taxa_total)
+    parcela = valor_plano / prazo
+    lance_emb = valor * (emb_pct / 100)
+    credito_liquido = valor - lance_emb
+    lance_total = lance_emb + livre + fixo
 
-    return {
-        "parcela": parcela,
-        "total": plano + lance,
-        "lance": lance,
-        "credito_liquido": valor - lance,
-        "prob": prob_txt,
-        "prob_num": prob_num,
-        "ranking": ranking_lance(lance_pct),
-        "pago_ate_cont": parcela * prazo_cont
-    }
+    return parcela, valor_plano, credito_liquido, lance_total
+
+def financiamento(valor, taxa, prazo):
+    parcela = valor * (taxa*(1+taxa)**prazo)/((1+taxa)**prazo-1)
+    total = parcela * prazo
+    juros = total - valor
+    return parcela, total, juros
 
 # =========================
-# FUNÇÕES – FINANCIAMENTO
+# INPUTS
 # =========================
-def financiamento_detalhado(valor, taxa, prazo, modelo):
-    saldo = valor
-    saldos = []
-    parcelas = []
+st.header("📊 Dados da Simulação")
 
-    if modelo == "SAC":
-        amort = valor / prazo
-        for _ in range(prazo):
-            juros = saldo * taxa
-            parcela = amort + juros
-            saldo -= amort
-            parcelas.append(parcela)
-            saldos.append(max(saldo, 0))
-    else:
-        parcela_fixa = valor * (taxa * (1 + taxa)**prazo) / ((1 + taxa)**prazo - 1)
-        for _ in range(prazo):
-            juros = saldo * taxa
-            amort = parcela_fixa - juros
-            saldo -= amort
-            parcelas.append(parcela_fixa)
-            saldos.append(max(saldo, 0))
+c1, c2 = st.columns(2)
 
-    return parcelas, saldos, sum(parcelas)
+with c1:
+    credito = st.number_input("Crédito desejado (R$)", 100000.0, 3000000.0, 300000.0)
+    prazo_c = st.number_input("Prazo Consórcio (meses)", 60, 240, 180)
+    taxa_adm = st.number_input("Taxa Administrativa (%)", 5.0, 30.0, 15.0)
+    fundo = st.number_input("Fundo Reserva (%)", 0.0, 5.0, 2.0)
+    lance_emb = st.number_input("Lance Embutido (%)", 0.0, 50.0, 30.0)
+    lance_livre = st.number_input("Lance Livre (R$)", 0.0, 500000.0, 0.0)
+    lance_fixo = st.number_input("Lance Fixo (R$)", 0.0, 500000.0, 0.0)
+
+with c2:
+    valor_bem = st.number_input("Valor do Bem (Financiamento)", 100000.0, 5000000.0, 500000.0)
+    entrada = st.number_input("Entrada (R$)", 0.0, valor_bem*0.8, valor_bem*0.2)
+    prazo_f = st.number_input("Prazo Financiamento (meses)", 60, 420, 240)
+    taxa_f = st.number_input("Taxa mensal (%)", 0.5, 3.0, 1.2) / 100
 
 # =========================
-# INTERFACE
+# CÁLCULOS
 # =========================
-st.title("💎 Intelligence Banking – Simulador Profissional")
-
-tab_c, tab_f, tab_comp = st.tabs([
-    "🤝 Consórcio",
-    "🏦 Financiamento",
-    "🔄 Estratégia Comparativa"
-])
-
-# =========================
-# CONSÓRCIO
-# =========================
-with tab_c:
-    c1, c2 = st.columns([1, 2])
-
-    with c1:
-        valor = st.number_input("Valor do Crédito", 100000.0, 3000000.0, 300000.0)
-        prazo_c = st.number_input("Prazo", 60, 240, 180)
-        taxa_adm = st.number_input("Taxa Administração (%)", 5.0, 30.0, 15.0)
-        fundo = st.number_input("Fundo Reserva (%)", 0.0, 5.0, 2.0)
-        lance_pct = st.number_input("Lance (%)", 0.0, 100.0, 30.0)
-        prazo_cont = st.number_input("Prazo desejado contemplação", 1, prazo_c, 12)
-
-    cons = calcular_consorcio(valor, prazo_c, taxa_adm, fundo, lance_pct, prazo_cont)
-
-    with c2:
-        st.markdown(f"""
-        <div class="card">
-        Parcela: <b>R$ {cons['parcela']:,.2f}</b><br>
-        Total estimado: <b>R$ {cons['total']:,.2f}</b><br>
-        Crédito líquido: <b>R$ {cons['credito_liquido']:,.2f}</b>
-        </div>
-        """, unsafe_allow_html=True)
-
-        st.metric("Probabilidade", cons["prob"], f"{cons['prob_num']}%")
-        st.metric("Ranking do Lance", cons["ranking"])
-
-# =========================
-# FINANCIAMENTO
-# =========================
-with tab_f:
-    f1, f2 = st.columns([1, 2])
-
-    with f1:
-        valor_bem = st.number_input("Valor do Bem", 100000.0, 5000000.0, 500000.0)
-        entrada = st.number_input("Entrada", 0.0, valor_bem * 0.8, valor_bem * 0.2)
-        prazo_f = st.number_input("Prazo (meses)", 12, 420, 240)
-        taxa = st.number_input("Taxa mensal (%)", 0.5, 3.0, 1.2) / 100
-        modelo = st.selectbox("Sistema", ["Price", "SAC"])
-
-    valor_fin = valor_bem - entrada
-    parcelas, saldos, total_pago = financiamento_detalhado(valor_fin, taxa, prazo_f, modelo)
-
-    with f2:
-        aba1, aba2 = st.tabs(["📉 Saldo Devedor", "📊 Resumo"])
-
-        with aba1:
-            df = pd.DataFrame({"Mês": range(1, prazo_f+1), "Saldo": saldos})
-            st.line_chart(df.set_index("Mês"))
-
-        with aba2:
-            st.markdown(f"""
-            <div class="card">
-            Valor financiado: <b>R$ {valor_fin:,.2f}</b><br>
-            Parcela inicial: <b>R$ {parcelas[0]:,.2f}</b><br>
-            Parcela final: <b>R$ {parcelas[-1]:,.2f}</b><br>
-            Total pago: <b>R$ {total_pago:,.2f}</b>
-            </div>
-            """, unsafe_allow_html=True)
-
-# =========================
-# COMPARAÇÃO + RECOMENDAÇÃO
-# =========================
-with tab_comp:
-    score_cons = 0
-    score_fin = 0
-
-    if cons["total"] < total_pago: score_cons += 2
-    else: score_fin += 2
-
-    if cons["parcela"] < parcelas[0]: score_cons += 1
-    else: score_fin += 1
-
-    if prazo_cont <= 24: score_cons += 1
-    else: score_fin += 1
-
-    df = pd.DataFrame({
-        "Modalidade": ["Consórcio", "Financiamento"],
-        "Parcela Inicial": [cons["parcela"], parcelas[0]],
-        "Custo Total": [cons["total"], total_pago]
-    })
-
-    st.dataframe(df, use_container_width=True)
-
-    if score_cons > score_fin:
-        st.success("🎯 Melhor estratégia: **CONSÓRCIO**")
-    else:
-        st.warning("🎯 Melhor estratégia: **FINANCIAMENTO**")
-
-    st.caption(f"Score Consórcio: {score_cons} | Score Financiamento: {score_fin}")
-
-st.markdown(
-    '<div class="footer">Desenvolvido por Victor • Intelligence Banking 2026</div>',
-    unsafe_allow_html=True
+parc_c, plano, credito_liq, lance_total = calcular_consorcio(
+    credito, prazo_c, taxa_adm, fundo, lance_emb, lance_livre, lance_fixo
 )
+
+valor_fin = valor_bem - entrada
+parc_f, total_f, juros_f = financiamento(valor_fin, taxa_f, prazo_f)
+
+melhor = "CONSÓRCIO" if parc_c < parc_f else "FINANCIAMENTO"
+
+# =========================
+# RESULTADOS
+# =========================
+st.header("📌 Resultado")
+
+r1, r2 = st.columns(2)
+
+with r1:
+    st.markdown(f"""
+    <div class="card">
+    <h3>Consórcio</h3>
+    Parcela: <b>R$ {parc_c:,.2f}</b><br>
+    Crédito líquido: <b>R$ {credito_liq:,.2f}</b><br>
+    Lance total: <b>R$ {lance_total:,.2f}</b>
+    </div>
+    """, unsafe_allow_html=True)
+
+with r2:
+    st.markdown(f"""
+    <div class="card">
+    <h3>Financiamento</h3>
+    Parcela: <b>R$ {parc_f:,.2f}</b><br>
+    Juros totais: <b>R$ {juros_f:,.2f}</b><br>
+    Total pago: <b>R$ {total_f:,.2f}</b>
+    </div>
+    """, unsafe_allow_html=True)
+
+st.success(f"🎯 Estratégia recomendada: **{melhor}**")
+
+# =========================
+# PROPOSTA + PDF
+# =========================
+st.header("📄 Proposta Automática")
+
+cliente = st.text_input("Nome do Cliente")
+consultor = st.text_input("Consultor Responsável")
+
+texto = f"""
+Cliente: {cliente}
+Consultor: {consultor}
+
+Estratégia recomendada: {melhor}
+
+Resumo da Simulação:
+
+CONSÓRCIO
+- Parcela: R$ {parc_c:,.2f}
+- Crédito líquido: R$ {credito_liq:,.2f}
+- Lance total: R$ {lance_total:,.2f}
+
+FINANCIAMENTO
+- Parcela: R$ {parc_f:,.2f}
+- Total de juros: R$ {juros_f:,.2f}
+
+Conclusão:
+A estratégia mais eficiente para este perfil é {melhor},
+considerando custo total, impacto no caixa e flexibilidade financeira.
+"""
+
+st.text_area("Texto da Proposta", texto, height=250)
+
+def gerar_pdf(texto):
+    temp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+    doc = SimpleDocTemplate(temp.name, pagesize=A4,
+                            rightMargin=2*cm,leftMargin=2*cm,
+                            topMargin=2*cm,bottomMargin=2*cm)
+
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(
+        name="Titulo",
+        fontSize=18,
+        textColor=HexColor("#1e3a8a"),
+        spaceAfter=20
+    ))
+
+    story = []
+    story.append(Paragraph("PROPOSTA INTELLIGENCE BANKING", styles["Titulo"]))
+    for linha in texto.split("\n"):
+        story.append(Paragraph(linha, styles["Normal"]))
+        story.append(Spacer(1, 8))
+
+    doc.build(story)
+    return temp.name
+
+if st.button("📄 Gerar PDF Institucional"):
+    pdf_path = gerar_pdf(texto)
+    with open(pdf_path, "rb") as f:
+        st.download_button(
+            "⬇️ Baixar Proposta em PDF",
+            f,
+            file_name="Proposta_Intelligence_Banking.pdf",
+            mime="application/pdf"
+        )
+
+
 
 
 
