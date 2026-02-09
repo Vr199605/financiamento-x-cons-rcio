@@ -95,8 +95,8 @@ def calcular_financiamento(valor, taxa_mensal, prazo, modelo):
 
 st.title("💎 Intelligence Banking – Simulador Profissional")
 
-tab_cons, tab_fin, tab_comp, tab_txt, tab_exp = st.tabs(
-    ["🤝 Consórcio", "🏦 Financiamento", "🔄 Comparação", "📄 Proposta (.txt)", "📘 Como os cálculos funcionam"]
+tab_cons, tab_fin, tab_comp, tab_txt, tab_did = st.tabs(
+    ["🤝 Consórcio", "🏦 Financiamento", "🔄 Comparação", "📄 Proposta (.txt)", "📘 Explicação Didática"]
 )
 
 # =========================
@@ -128,7 +128,7 @@ with tab_cons:
         <div class="card">
         • Parcela mensal: <b>R$ {res_c['Parcela']:,.2f}</b><br>
         • Lance total: <b>R$ {res_c['Lance Total']:,.2f}</b><br>
-        • Crédito líquido após lance embutido: <b>R$ {res_c['Crédito Líquido']:,.2f}</b>
+        • Crédito líquido: <b>R$ {res_c['Crédito Líquido']:,.2f}</b>
         </div>
         """, unsafe_allow_html=True)
 
@@ -145,11 +145,7 @@ with tab_fin:
         entrada = st.number_input("Entrada (R$)", 0.0, valor_bem * 0.9, valor_bem * 0.2)
         prazo_f = st.number_input("Prazo (meses)", 12, 420, 240)
 
-        juros_anual = st.number_input(
-            "Taxa de Juros Anual (%)",
-            1.0, 30.0, 12.0
-        ) / 100
-
+        juros_anual = st.number_input("Taxa de Juros Anual (%)", 1.0, 30.0, 12.0) / 100
         modelo = st.selectbox("Sistema de Amortização", ["Price", "SAC"])
 
     taxa_mensal = (1 + juros_anual) ** (1 / 12) - 1
@@ -194,11 +190,10 @@ with tab_txt:
 
     proposta = f"""
 PROPOSTA FINANCEIRA – INTELLIGENCE BANKING
-----------------------------------------
 
 CONSÓRCIO
-Valor do crédito: R$ {valor_credito:,.2f}
-Parcela mensal: R$ {res_c['Parcela']:,.2f}
+Crédito: R$ {valor_credito:,.2f}
+Parcela: R$ {res_c['Parcela']:,.2f}
 Lance total: R$ {res_c['Lance Total']:,.2f}
 Crédito líquido: R$ {res_c['Crédito Líquido']:,.2f}
 
@@ -210,46 +205,47 @@ Parcela final: R$ {p_fim:,.2f}
 Total pago: R$ {total_pago:,.2f}
 
 RECOMENDAÇÃO
-Estratégia indicada: {"CONSÓRCIO" if score_cons > score_fin else "FINANCIAMENTO"}
+{"CONSÓRCIO" if score_cons > score_fin else "FINANCIAMENTO"}
 """
 
-    st.download_button(
-        "⬇️ Baixar Proposta em TXT",
-        proposta,
-        file_name="proposta_intelligence_banking.txt"
-    )
+    st.download_button("⬇️ Baixar Proposta", proposta, "proposta_intelligence.txt")
 
 # =========================
 # EXPLICAÇÃO DIDÁTICA
 # =========================
-with tab_exp:
-    st.header("📘 Como os cálculos funcionam")
+with tab_did:
+    st.header("📘 Explicação Didática dos Cálculos")
 
+    st.subheader("🤝 Consórcio")
     st.markdown("""
-### 🤝 Consórcio
-- **Parcela mensal** = (Valor do crédito + taxas) ÷ prazo  
+- **Parcela** = (Crédito + taxas) ÷ prazo  
 - **Taxa total** = taxa de administração + fundo de reserva  
-- **Lance embutido**: percentual do crédito usado como lance  
-- **Crédito líquido** = valor do crédito − lance embutido  
-⚠️ Lance livre e fixo **não descontam** do crédito.
+- **Lance embutido** reduz o crédito recebido  
+- **Lance livre e fixo** não reduzem o crédito, apenas aumentam competitividade  
+- **Crédito líquido** = crédito contratado − lance embutido
+""")
 
----
+    st.subheader("🏦 Financiamento")
+    st.markdown("""
+**PRICE**
+- Parcelas fixas
+- Juros maiores no início
+- Amortização cresce ao longo do tempo
 
-### 🏦 Financiamento
-- O cliente informa a **taxa anual**
-- O sistema converte para **taxa mensal equivalente**
-- **Tabela SAC**: amortização fixa, parcelas decrescentes  
-- **Tabela Price**: parcela fixa, juros maiores no início  
+**SAC**
+- Parcelas decrescentes
+- Amortização fixa
+- Menor custo total de juros
+""")
 
----
+    st.subheader("🧠 Score de Estratégia")
+    st.markdown("""
+O score começa em **100 pontos** e sofre penalizações por:
+- Custo total elevado
+- Parcela mensal alta
+- Prazo longo
 
-### 🧠 Score de Estratégia
-O score começa em **100 pontos** e perde pontos conforme:
-- 💰 Custo total da operação
-- 📆 Prazo do contrato
-- 💸 Valor da parcela inicial  
-
-👉 Quanto **maior o score**, melhor a estratégia financeira.
+Quanto **maior o score**, melhor a estratégia financeira.
 """)
 
 # =========================
@@ -259,6 +255,8 @@ st.markdown(
     '<div class="footer">Desenvolvido por Victor • Intelligence Banking 2026</div>',
     unsafe_allow_html=True
 )
+
+
 
 
 
